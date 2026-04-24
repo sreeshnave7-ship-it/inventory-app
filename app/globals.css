@@ -1,26 +1,39 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* Your custom colors (keep these) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-page: #0D1117;
+  --color-surface: #161B22;
+  --color-elevated: #1C2128;
+  --color-primary: #4C6EF5;
+  --color-primary-hover: #5A7CFA;
+  --color-label: #E6EDF3;
+  --color-secondary: #9DA7B3;
+  --color-muted: #6B7280;
+  --color-edge: #21262D;
+  --color-success: #2EA043;
+  --color-warning: #D29922;
+  --color-danger: #F85149;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-page);
+  color: var(--color-label);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
 }
