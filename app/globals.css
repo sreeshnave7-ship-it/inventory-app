@@ -2,38 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Your custom colors (keep these) */
-:root {
-  --color-page: #0D1117;
-  --color-surface: #161B22;
-  --color-elevated: #1C2128;
-  --color-primary: #4C6EF5;
-  --color-primary-hover: #5A7CFA;
-  --color-label: #E6EDF3;
-  --color-secondary: #9DA7B3;
-  --color-muted: #6B7280;
-  --color-edge: #21262D;
-  --color-success: #2EA043;
-  --color-warning: #D29922;
-  --color-danger: #F85149;
+/* ===== FONT ===== */
+@font-face {
+  font-family: "Milker";
+  src: url("/fonts/Milker.otf") format("opentype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
 }
 
-/* Reset */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+:root {
+  --font-display: "Milker", sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ===== BASE RESET ===== */
+html, body {
   margin: 0;
   padding: 0;
-}
+  height: 100%;
+  background: linear-gradient(135deg, #F7F3EC, #EDE6DA);
+  font-family: var(--font-body);
 
-body {
-  background-color: var(--color-page);
-  color: var(--color-label);
+  /* Rendering polish */
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  text-decoration: none;
-  color: inherit;
+/* ===== TYPOGRAPHY ===== */
+h1, h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+p, span, table, input, button {
+  font-family: var(--font-body);
+}
+
+/* ===== CONTROLLED TRANSITIONS ===== */
+/* Only apply where needed — avoids jitter */
+.motion-safe {
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ===== SQUIRCLE SYSTEM ===== */
+.squircle {
+  border-radius: 22px; /* slightly tighter = more Apple-like */
+  overflow: hidden;
+
+  /* smoother curvature illusion */
+  mask-image: radial-gradient(circle at center, black 97%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle at center, black 97%, transparent 100%);
+}
+
+/* ===== CARD BASE (OPTIONAL UTILITY) ===== */
+.card-base {
+  background: #FAF9F6;
+  box-shadow:
+    0 12px 32px rgba(0,0,0,0.08),
+    0 2px 8px rgba(0,0,0,0.04);
+}
+
+/* ===== UNDERGLOW BASE ===== */
+.underglow {
+  background: rgba(58,125,93,0.25);
+  filter: blur(24px);
 }

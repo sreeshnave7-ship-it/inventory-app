@@ -1,344 +1,249 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import Card from '@/components/ui/Card'
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { motion } from "framer-motion";
+import { exportMovementsToExcel } from "@/lib/exportExcel";
+import { useToast } from "@/components/ui/ToastProvider";
+import { executeMovement } from "@/lib/movementEngine";
+
+const LOCATION_TYPES = ["SUPPLIER", "PLOT", "SITE", "SERVICE"];
 
 export default function MovementsPage() {
-  const [movements, setMovements] = useState([])
-  const [items, setItems] = useState([])
-  const [success, setSuccess] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [movements, setMovements] = useState([]);
+  const [items, setItems] = useState([]);
+  const [user, setUser] = useState(null);
+
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterLocation, setFilterLocation] = useState("");
+
+  const { addToast } = useToast();
 
   const [form, setForm] = useState({
-    item_type: 'material',
-    item_id: '',
+    item_type: "material",
+    item_id: "",
     quantity: 1,
-    movement_direction: 'OUT',
-    user_name: '',
-  })
+    from_location_type: "SUPPLIER",
+    to_location_type: "PLOT",
+    challan_number: "",
+  });
+
+  // ================= INIT =================
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+    });
+  }, []);
 
   async function fetchMovements() {
-    const { data, error } = await supabase
-      .from('movements')
-      .select('*')
-      .order('date', { ascending: false })
+    const { data } = await supabase
+      .from("movements")
+      .select("*")
+      .order("date", { ascending: false });
 
-    if (error) console.error(error)
-    setMovements(data || [])
+    setMovements(data || []);
   }
 
   async function fetchItems() {
     const table =
-      form.item_type === 'material' ? 'materials' : 'equipment'
+      form.item_type === "material" ? "materials" : "equipment";
+
+    const { data } = await supabase.from(table).select("id, name");
+    setItems(data || []);
+  }
+
+  useEffect(() => {
+    fetchMovements();
+  }, []);
+
+  useEffect(() => {
+    fetchItems();
+  }, [form.item_type]);
+
+  // ================= EXPORT =================
+  async function handleExport() {
+    if (!fromDate || !toDate) {
+      addToast("Select date range", "error");
+      return;
+    }
 
     const { data, error } = await supabase
-      .from(table)
-      .select('id, name')
+      .from("movements")
+      .select("*")
+      .gte("date", fromDate)
+      .lte("date", toDate);
 
     if (error) {
-      console.error(error)
-      return
+      addToast(error.message, "error");
+      return;
     }
 
-    setItems(data || [])
-  }
-
-  useEffect(() => {
-    fetchMovements()
-  }, [])
-
-  useEffect(() => {
-    fetchItems()
-  }, [form.item_type])
-
-  function handleChange(e) {
-    const { name, value } = e.target
-
-    setForm({
-      ...form,
-      [name]:
-        name === 'quantity'
-          ? value === ''
-            ? ''
-            : Number(value)
-          : value,
-    })
-  }
-
-  function resetForm() {
-    setForm({
-      item_type: 'material',
-      item_id: '',
-      quantity: 1,
-      movement_direction: 'OUT',
-      user_name: '',
-    })
-  }
-
-  function timeAgo(date) {
-    const seconds = Math.floor(
-      (new Date() - new Date(date)) / 1000
-    )
-
-    if (seconds < 60) return 'just now'
-    if (seconds < 3600)
-      return `${Math.floor(seconds / 60)}m ago`
-    if (seconds < 86400)
-      return `${Math.floor(seconds / 3600)}h ago`
-
-    return `${Math.floor(seconds / 86400)}d ago`
-  }
-
-  function formatMovement(m) {
-    const item =
-      m.item_type === 'material' ? 'Material' : 'Equipment'
-    const qty = m.quantity || 1
-
-    if (m.item_type === 'material') {
-      return `${item} movement → ${qty} units`
+    if (!data.length) {
+      addToast("No data found", "info");
+      return;
     }
 
-    if (m.item_type === 'equipment') {
-      return `Equipment movement`
-    }
-
-    return 'Movement recorded'
+    exportMovementsToExcel(data);
+    addToast("Exported successfully", "success");
   }
 
+  // ================= ADD =================
   async function addMovement() {
     if (!form.item_id) {
-      alert('Please select an item')
-      return
+      addToast("Select item", "error");
+      return;
     }
 
-    const qty = Number(form.quantity) || 1
-    setLoading(true)
+    const qty = Number(form.quantity);
 
-    // INSERT MOVEMENT
-    const { error } = await supabase.from('movements').insert([
-      {
+    if (!qty || qty <= 0) {
+      addToast("Enter valid quantity", "error");
+      return;
+    }
+
+    try {
+      await executeMovement({
         item_type: form.item_type,
         item_id: form.item_id,
-        from_location: null,
-        to_location: null,
         quantity: qty,
-        user_name: form.user_name || 'admin',
-      },
-    ])
+        from_location_type: form.from_location_type,
+        to_location_type: form.to_location_type,
+        user_name: user?.email || "unknown",
+        challan_number: form.challan_number || null,
+      });
 
-    if (error) {
-      console.error(error)
-      alert(error.message)
-      setLoading(false)
-      return
+      addToast("Movement recorded", "success");
+      fetchMovements();
+    } catch (err) {
+      addToast(err.message, "error");
     }
-
-    // MATERIAL LOGIC
-    if (form.item_type === 'material') {
-      const { data: material } = await supabase
-        .from('materials')
-        .select('*')
-        .eq('id', form.item_id)
-        .single()
-
-      if (!material) {
-        alert('Material not found')
-        setLoading(false)
-        return
-      }
-
-      let newQty = material.quantity || 0
-
-      if (form.movement_direction === 'OUT') {
-        newQty -= qty
-
-        if (newQty < 0) {
-          alert('Not enough stock')
-          setLoading(false)
-          return
-        }
-      }
-
-      if (form.movement_direction === 'IN') {
-        newQty += qty
-      }
-
-      await supabase
-        .from('materials')
-        .update({ quantity: newQty })
-        .eq('id', form.item_id)
-    }
-
-    // EQUIPMENT LOGIC
-    if (form.item_type === 'equipment') {
-      if (form.movement_direction === 'OUT') {
-        await supabase
-          .from('equipment')
-          .update({
-            current_location: 'In Use',
-            status: 'Active',
-          })
-          .eq('id', form.item_id)
-      }
-
-      if (form.movement_direction === 'IN') {
-        await supabase
-          .from('equipment')
-          .update({
-            current_location: 'Warehouse',
-            status: 'Available',
-          })
-          .eq('id', form.item_id)
-      }
-    }
-
-    setSuccess(true)
-    setTimeout(() => setSuccess(false), 2000)
-
-    resetForm()
-    fetchMovements()
-    setLoading(false)
   }
 
+  // ================= FILTER =================
+  const filteredMovements = movements.filter((m) => {
+    const matchesSearch =
+      m.user_name?.toLowerCase().includes(search.toLowerCase()) ||
+      m.item_type?.toLowerCase().includes(search.toLowerCase());
+
+    const matchesType = filterType ? m.item_type === filterType : true;
+
+    const matchesLocation = filterLocation
+      ? m.from_location_type === filterLocation ||
+        m.to_location_type === filterLocation
+      : true;
+
+    return matchesSearch && matchesType && matchesLocation;
+  });
+
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">
-        Stock Movements
-      </h1>
+    <div className="min-h-screen p-8">
 
-      {success && (
-        <div className="text-green-400 text-sm">
-          Movement recorded successfully
-        </div>
-      )}
+      {/* HEADER */}
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="mb-8"
+      >
+        <h1 className="text-5xl" style={{ fontFamily: "Milker" }}>
+          Movements
+        </h1>
+        <p className="text-[#6B6B6B] mt-2 text-sm">
+          Track and control stock flow across locations
+        </p>
+      </motion.div>
 
-      {/* FORM */}
-      <Card>
-        <div className="grid grid-cols-2 gap-3">
-          <select
-            name="item_type"
-            value={form.item_type}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          >
-            <option value="material">Material</option>
-            <option value="equipment">Equipment</option>
-          </select>
-
-          <select
-            value={form.item_id}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                item_id: e.target.value,
-              })
-            }
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          >
-            <option value="">Select Item</option>
-
-            {items.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-
-          <input
-            name="quantity"
-            placeholder="Quantity"
-            value={form.quantity}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-          <input
-            name="user_name"
-            placeholder="User"
-            value={form.user_name}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-        </div>
-
-        {/* DIRECTION BUTTONS */}
-        <div className="flex gap-2 mt-4">
-          {['OUT', 'IN'].map((dir) => (
-            <button
-              key={dir}
-              type="button"
-              onClick={() =>
-                setForm({
-                  ...form,
-                  movement_direction: dir,
-                })
-              }
-              className={`
-                px-4 py-2 rounded-xl border text-sm
-
-                ${
-                  form.movement_direction === dir
-                    ? 'bg-[#4C6EF5] text-white border-[#4C6EF5]'
-                    : 'bg-[#161B22] border-[#2A2F36] text-gray-400'
-                }
-
-                transition-all duration-200
-              `}
-            >
-              {dir}
-            </button>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={addMovement}
-          disabled={loading}
-          className="mt-4 bg-[#4C6EF5] px-4 py-2 rounded text-white hover:opacity-90 transition"
-        >
-          {loading ? 'Processing...' : 'Record Movement'}
+      {/* EXPORT */}
+      <div className="squircle bg-[#FAF9F6] p-5 mb-6 flex flex-wrap gap-3 items-center">
+        <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="px-3 py-2 border squircle"/>
+        <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="px-3 py-2 border squircle"/>
+        <button onClick={handleExport} className="bg-[#3A7D5D] text-white px-4 py-2 squircle">
+          Export Excel
         </button>
-      </Card>
+      </div>
 
-      {/* ACTIVITY LOG */}
-      <div className="flex flex-col gap-4">
-        {movements.map((m) => (
-          <Card key={m.id}>
-            <div className="flex flex-col gap-3">
-              <div className="flex justify-between items-center">
-                <p className="font-medium text-sm">
-                  {formatMovement(m)}
-                </p>
+      {/* FILTERS */}
+      <div className="squircle bg-[#FAF9F6] p-5 mb-6 flex flex-wrap gap-3">
+        <input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="px-3 py-2 border squircle"/>
+        
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="px-3 py-2 border squircle">
+          <option value="">All Types</option>
+          <option value="material">Material</option>
+          <option value="equipment">Equipment</option>
+        </select>
 
-                <p className="text-xs text-[#6B7280]">
-                  {timeAgo(m.date)}
-                </p>
-              </div>
+        <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="px-3 py-2 border squircle">
+          <option value="">All Locations</option>
+          {LOCATION_TYPES.map((loc) => (
+            <option key={loc}>{loc}</option>
+          ))}
+        </select>
+      </div>
 
-              <div className="flex gap-3 text-xs text-[#9DA7B3]">
-                <span>
-                  {m.item_type === 'material'
-                    ? 'Material'
-                    : 'Equipment'}
-                </span>
+      {/* ADD MOVEMENT */}
+      <div className="squircle bg-[#FAF9F6] p-6 mb-8 flex flex-wrap gap-3">
 
-                <span>•</span>
+        <select value={form.item_type} onChange={(e) => setForm({ ...form, item_type: e.target.value })} className="px-3 py-2 border squircle">
+          <option value="material">Material</option>
+          <option value="equipment">Equipment</option>
+        </select>
 
-                <span>Qty: {m.quantity || 1}</span>
+        <select value={form.item_id} onChange={(e) => setForm({ ...form, item_id: e.target.value })} className="px-3 py-2 border squircle">
+          <option value="">Select Item</option>
+          {items.map((i) => (
+            <option key={i.id} value={i.id}>
+  {i.name} ({form.item_type})
+</option>
+          ))}
+        </select>
 
-                <span>•</span>
+        <input placeholder="Quantity" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} className="px-3 py-2 border squircle w-24"/>
 
-                <span>{m.user_name || '—'}</span>
-              </div>
+        <select value={form.from_location_type} onChange={(e) => setForm({ ...form, from_location_type: e.target.value })} className="px-3 py-2 border squircle">
+          {LOCATION_TYPES.map((l) => <option key={l}>{l}</option>)}
+        </select>
 
-              <p className="text-[10px] text-[#6B7280] truncate">
-                {m.item_id}
+        <select value={form.to_location_type} onChange={(e) => setForm({ ...form, to_location_type: e.target.value })} className="px-3 py-2 border squircle">
+          {LOCATION_TYPES.map((l) => <option key={l}>{l}</option>)}
+        </select>
+
+        <input placeholder="Challan" value={form.challan_number} onChange={(e) => setForm({ ...form, challan_number: e.target.value })} className="px-3 py-2 border squircle"/>
+
+        <button onClick={addMovement} className="bg-[#3A7D5D] text-white px-4 py-2 squircle">
+          Record
+        </button>
+
+      </div>
+
+      {/* LIST */}
+      <div className="grid gap-4">
+        {filteredMovements.map((m) => (
+          <div key={m.id} className="squircle bg-[#FAF9F6] p-4 flex justify-between items-center">
+
+            <div>
+              <p className="text-xs text-[#A0A0A0]">
+  {m.user_name} • {m.to_location_type}
+</p>
+              <p>
+                {m.item_type.toUpperCase()} • Qty: {m.quantity}
+              </p>
+              <p className="text-xs text-[#A0A0A0]">
+                {m.user_name}
               </p>
             </div>
-          </Card>
+
+            <div className="text-xs text-[#6B6B6B]">
+              {m.date ? new Date(m.date).toLocaleDateString() : ""}
+            </div>
+
+          </div>
         ))}
       </div>
+
     </div>
-  )
+  );
 }

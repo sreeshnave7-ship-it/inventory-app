@@ -1,21 +1,43 @@
-export default function Card({ children, className = "" }) {
+'use client'
+
+import { motion } from 'framer-motion'
+import { useState } from 'react'
+
+export default function Card({ children }) {
+  const [hover, setHover] = useState(false)
+
   return (
-    <div className={`bg-[#161B22]
-        border border-[#2A2F36]
+    <motion.div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      whileTap={{ scale: 0.98 }}
+      animate={{
+        y: hover ? -4 : 0,
+        boxShadow: hover
+          ? '0 20px 60px rgba(0,0,0,0.6)'
+          : '0 10px 30px rgba(0,0,0,0.3)',
+      }}
+      className="
+        relative
         rounded-2xl
         p-4
+        bg-[#161B22]/70
+        border border-[#2A2F36]
+        overflow-hidden
+      "
+    >
+      {/* glow layer */}
+      <div
+        className="
+          absolute inset-0 opacity-0 hover:opacity-100
+          transition duration-300
+          bg-gradient-to-br from-[#4C6EF5]/10 via-transparent to-transparent
+        "
+      />
 
-        shadow-[0_2px_10px_rgba(0,0,0,0.2)]
-
-        transition-all duration-300 ease-out
-
-        hover:border-[#3A4149]
-        hover:shadow-[0_12px_40px_rgba(0,0,0,0.45)]
-        hover:-translate-y-[2px]
-
-        active:translate-y-[1px]
-        active:shadow-[0_4px_12px_rgba(0,0,0,0.3)]`}>
-      {children}
-    </div>
-  );
+      <div className="relative z-10">
+        {children}
+      </div>
+    </motion.div>
+  )
 }

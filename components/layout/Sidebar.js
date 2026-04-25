@@ -1,82 +1,71 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import {
-  LayoutDashboard,
-  Package,
-  Wrench,
-  ArrowLeftRight,
-  ClipboardList,
-} from 'lucide-react'
+import { usePathname, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 
-const navItems = [
-  { href: '/', icon: LayoutDashboard },
-  { href: '/materials', icon: Package },
-  { href: '/equipment', icon: Wrench },
-  { href: '/movements', icon: ArrowLeftRight },
-  { href: '/logs', icon: ClipboardList },
-]
+const items = [
+  { name: "Dashboard", path: "/" },
+  { name: "Materials", path: "/materials" },
+  { name: "Movements", path: "/movements" },
+  { name: "Equipment", path: "/equipment" },
+  { name: "Analytics", path: "/analytics" },
+];
 
 export default function Sidebar() {
-  const pathname = usePathname()
+  const pathname = usePathname();
+  const router = useRouter();
 
   return (
-    <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-16 flex-col items-center bg-page border-r border-edge shrink-0">
-        {/* Logo */}
-        <div className="h-14 flex items-center justify-center">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-            <Package size={16} className="text-white" />
-          </div>
-        </div>
+    <div className="w-64 p-6 bg-[#F1EEE8] border-r border-[#E5E5E5]">
+      
+      {/* LOGO */}
+      <h1
+        className="text-1xl mb-10 tracking-wider"
+        style={{ fontFamily: "Milker, sans-serif" }}
+      >
+        Manuel Correya Engineering Contractors
+      </h1>
 
-        {/* Nav */}
-        <nav className="flex-1 flex flex-col items-center gap-8 pt-6">
-          {navItems.map(({ href, icon: Icon }) => {
-            const active = pathname === href
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors duration-150 ${
-                  active
-                    ? 'bg-elevated text-white'
-                    : 'text-muted hover:text-secondary hover:bg-elevated/60'
-                }`}
-              >
-                <Icon size={18} strokeWidth={1.8} />
-              </Link>
-            )
-          })}
-        </nav>
+      <div className="flex flex-col gap-2">
+        {items.map((item) => {
+  const active = pathname === item.path;
 
-        {/* User avatar */}
-        <div className="pb-5">
-          <div className="w-9 h-9 rounded-full bg-elevated border border-edge flex items-center justify-center text-[11px] font-semibold text-secondary">
-            U
-          </div>
-        </div>
-      </aside>
+  return (
+    <div
+      key={item.path}
+      onClick={() => router.push(item.path)}
+      className="relative cursor-pointer px-4 py-2 rounded-xl"
+    >
+      {/* ACTIVE (PRIORITY) */}
+      {active && (
+        <motion.div
+          layoutId="sidebar-pill"
+          className="absolute inset-0 rounded-xl bg-[#3A7D5D]"
+          transition={{
+            type: "spring",
+            stiffness: 350,
+            damping: 30,
+          }}
+        />
+      )}
 
-      {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden flex items-center justify-around h-16 bg-page border-t border-edge">
-        {navItems.map(({ href, icon: Icon }) => {
-          const active = pathname === href
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`w-12 h-12 flex items-center justify-center rounded-xl ${
-                active ? 'text-white bg-elevated' : 'text-muted'
-              }`}
-            >
-              <Icon size={20} strokeWidth={1.8} />
-            </Link>
-          )
-        })}
-      </nav>
-    </>
-  )
+      {/* HOVER ONLY IF NOT ACTIVE */}
+      {!active && (
+        <div className="absolute inset-0 rounded-xl hover:bg-[#E8E2D8] transition duration-150" />
+      )}
+
+      {/* TEXT */}
+      <span
+        className={`relative z-10 transition-colors duration-200 ${
+          active ? "text-white" : "text-[#1A1A1A]"
+        }`}
+      >
+        {item.name}
+      </span>
+    </div>
+  );
+})}
+      </div>
+    </div>
+  );
 }

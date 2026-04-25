@@ -1,315 +1,345 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import Card from '@/components/ui/Card'
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+
+const units = ["pcs", "kg", "liters", "meters"];
 
 export default function MaterialsPage() {
-  const [materials, setMaterials] = useState([])
+  const [materials, setMaterials] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+
+  const router = useRouter();
+
   const [form, setForm] = useState({
-    name: '',
-    description: '',
-    quantity: '',
-    unit: '',
-    price: '',
-    reason: '',
-    current_location: '',
-  })
-  const [editingId, setEditingId] = useState(null)
-  const [sortBy, setSortBy] = useState('name')
+    name: "",
+    description: "",
+    quantity: "",
+    unit: "pcs",
+    price: "",
+    reason: "",
+    current_location: "",
+  });
 
-  // FETCH
+  // ================= INIT =================
+  useEffect(() => {
+    async function init() {
+      const { data } = await supabase.auth.getUser();
+
+      if (!data.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .single();
+
+      const { data: locs } = await supabase
+        .from("locations")
+        .select("*");
+
+      setLocations(locs || []);
+      setRole(profile?.role);
+      setLoading(false);
+    }
+
+    init();
+  }, []);
+
+  // ================= FETCH =================
   async function fetchMaterials() {
-    const { data, error } = await supabase
-      .from('materials')
-      .select('*')
-      .order(sortBy, { ascending: true })
+    const { data } = await supabase
+      .from("materials")
+      .select("*, locations(name)");
 
-    if (error) console.error('Fetch error:', error)
-
-    setMaterials(data || [])
+    setMaterials(data || []);
   }
 
   useEffect(() => {
-    fetchMaterials()
-  }, [sortBy])
+    if (!loading) fetchMaterials();
+  }, [loading]);
 
-  // INPUT CHANGE
+  // ================= HANDLERS =================
   function handleChange(e) {
-    setForm({ ...form, [e.target.name]: e.target.value })
+    setForm({ ...form, [e.target.name]: e.target.value });
   }
 
   function resetForm() {
+    setEditingId(null);
     setForm({
-      name: '',
-      description: '',
-      quantity: '',
-      unit: '',
-      price: '',
-      reason: '',
-      current_location: '',
-    })
+      name: "",
+      description: "",
+      quantity: "",
+      unit: "pcs",
+      price: "",
+      reason: "",
+      current_location: "",
+    });
   }
 
-  // ADD
   async function addMaterial() {
-    if (!form.name) return
-
-    const { error } = await supabase.from('materials').insert([
+    await supabase.from("materials").insert([
       {
-        name: form.name,
-        description: form.description || null,
-        quantity: form.quantity ? Number(form.quantity) : 0,
-        unit: form.unit || null,
-        price: form.price ? Number(form.price) : null,
-        reason: form.reason || null,
-        current_location: form.current_location || null,
+        ...form,
+        quantity: Number(form.quantity) || 0,
+        price: Number(form.price) || 0,
       },
-    ])
+    ]);
 
-    if (error) console.error('Insert error:', error)
-
-    resetForm()
-    fetchMaterials()
+    resetForm();
+    fetchMaterials();
   }
 
-  // EDIT START
-  function startEdit(item) {
-    setEditingId(item.id)
-    setForm({
-      name: item.name || '',
-      description: item.description || '',
-      quantity: item.quantity || '',
-      unit: item.unit || '',
-      price: item.price || '',
-      reason: item.reason || '',
-      current_location: item.current_location || '',
-    })
-  }
-
-  // SAVE EDIT
-  async function saveEdit(id) {
-    const { error } = await supabase
-      .from('materials')
+  async function updateMaterial(id) {
+    await supabase
+      .from("materials")
       .update({
         ...form,
-        quantity: form.quantity ? Number(form.quantity) : 0,
-        price: form.price ? Number(form.price) : null,
+        quantity: Number(form.quantity),
+        price: Number(form.price),
       })
-      .eq('id', id)
+      .eq("id", id);
 
-    if (error) console.error('Update error:', error)
-
-    setEditingId(null)
-    resetForm()
-    fetchMaterials()
+    resetForm();
+    fetchMaterials();
   }
 
-  // DELETE
+  function startEdit(m) {
+    setForm({
+      name: m.name || "",
+      description: m.description || "",
+      quantity: m.quantity || "",
+      unit: m.unit || "pcs",
+      price: m.price || "",
+      reason: m.reason || "",
+      current_location: m.current_location || "",
+    });
+    setEditingId(m.id);
+  }
+
   async function deleteMaterial(id) {
-    const { error } = await supabase.from('materials').delete().eq('id', id)
+    if (role !== "admin") {
+      alert("Only admins can delete materials");
+      return;
+    }
 
-    if (error) console.error('Delete error:', error)
-
-    fetchMaterials()
+    await supabase.from("materials").delete().eq("id", id);
+    fetchMaterials();
   }
+
+  const filtered = materials.filter((m) =>
+    m.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (loading) return null;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="min-h-screen p-8">
 
-      <h1 className="text-xl font-semibold">Materials</h1>
+      {/* HEADER */}
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{
+          duration: 0.5,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        className="mb-8"
+      >
+        <h1
+          className="text-5xl tracking-tight text-[#1A1A1A]"
+          style={{ fontFamily: "Milker" }}
+        >
+          Materials
+        </h1>
+        <p className="text-[#6B6B6B] mt-2 text-sm">
+          Manage inventory, pricing, and locations
+        </p>
+      </motion.div>
 
-      {/* SORT */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setSortBy('name')}
-          className="px-3 py-1 bg-[#1C2128] rounded"
+      {/* SEARCH */}
+      <input
+        placeholder="Search materials..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="mb-6 px-4 py-2 squircle border w-full max-w-md bg-[#FAF9F6]"
+      />
+
+      {/* FORM */}
+      <div className="squircle bg-[#FAF9F6] p-6 mb-8 flex flex-wrap gap-3">
+
+        <input
+          name="name"
+          placeholder="Name"
+          value={form.name}
+          onChange={handleChange}
+          className="px-3 py-2 border squircle"
+        />
+
+        <input
+          name="description"
+          placeholder="Description"
+          value={form.description}
+          onChange={handleChange}
+          className="px-3 py-2 border squircle flex-1"
+        />
+
+        <input
+          name="quantity"
+          placeholder="Qty"
+          value={form.quantity}
+          onChange={handleChange}
+          className="px-3 py-2 border squircle w-24"
+        />
+
+        <select
+          name="unit"
+          value={form.unit}
+          onChange={handleChange}
+          className="px-3 py-2 border squircle"
         >
-          Sort by Name
-        </button>
-        <button
-          onClick={() => setSortBy('quantity')}
-          className="px-3 py-1 bg-[#1C2128] rounded"
+          {units.map((u) => (
+            <option key={u}>{u}</option>
+          ))}
+        </select>
+
+        <input
+          name="price"
+          placeholder="Price"
+          value={form.price}
+          onChange={handleChange}
+          className="px-3 py-2 border squircle w-28"
+        />
+
+        {/* LOCATION DROPDOWN (UUID BASED) */}
+        <select
+          name="current_location"
+          value={form.current_location || ""}
+          onChange={handleChange}
+          className="px-3 py-2 border squircle"
         >
-          Sort by Quantity
-        </button>
+          <option value="">Select location</option>
+          {locations.map((loc) => (
+            <option key={loc.id} value={loc.id}>
+              {loc.name}
+            </option>
+          ))}
+        </select>
+
+        <input
+          name="reason"
+          placeholder="Reason"
+          value={form.reason}
+          onChange={handleChange}
+          className="px-3 py-2 border squircle flex-1"
+        />
+
+        {editingId ? (
+          <>
+            <button
+              onClick={() => updateMaterial(editingId)}
+              className="bg-[#3A7D5D] text-white px-4 py-2 squircle"
+            >
+              Save
+            </button>
+            <button
+              onClick={resetForm}
+              className="px-4 py-2 border squircle"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={addMaterial}
+            className="bg-[#3A7D5D] text-white px-4 py-2 squircle"
+          >
+            Add
+          </button>
+        )}
       </div>
-
-      {/* ADD FORM */}
-      <Card>
-        <div className="grid grid-cols-2 gap-3">
-
-          <input
-            name="name"
-            placeholder="Name"
-            value={form.name}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-          <input
-            name="description"
-            placeholder="Description"
-            value={form.description}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-          <input
-            name="quantity"
-            placeholder="Quantity"
-            value={form.quantity}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-          <input
-            name="unit"
-            placeholder="Unit"
-            value={form.unit}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-          <input
-            name="price"
-            placeholder="Price"
-            value={form.price}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-          <input
-            name="reason"
-            placeholder="Reason"
-            value={form.reason}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-          <input
-            name="current_location"
-            placeholder="Location ID"
-            value={form.current_location}
-            onChange={handleChange}
-            className="bg-[#0E1116] border border-[#2A2F36] px-3 py-2 rounded"
-          />
-
-        </div>
-
-        <button
-          onClick={addMaterial}
-          className="mt-4 bg-[#4C6EF5] px-4 py-2 rounded text-white"
-        >
-          Add Material
-        </button>
-      </Card>
 
       {/* LIST */}
-      <div className="flex flex-col gap-4">
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={{
+          visible: { transition: { staggerChildren: 0.12 } },
+        }}
+        className="grid gap-4"
+      >
+        {filtered.length === 0 && (
+          <p className="text-[#6B6B6B] text-sm">No materials found.</p>
+        )}
 
-        {materials.map((m) => (
-          <Card key={m.id}>
+        {filtered.map((m) => (
+          <motion.div
+            key={m.id}
+            variants={{
+              hidden: { opacity: 0, y: 18 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: {
+                  duration: 0.4,
+                  ease: [0.22, 1, 0.36, 1],
+                },
+              },
+            }}
+            className="relative group"
+          >
+            {/* UNDERGLOW */}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-[-10px] w-[60%] h-[36px] rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition"
+              style={{ background: "rgba(58,125,93,0.25)" }}
+            />
 
-            {editingId === m.id ? (
-              <div className="grid grid-cols-2 gap-3">
+            <div className="squircle bg-[#FAF9F6] p-4 flex justify-between items-center">
 
-                {[
-                  'name',
-                  'description',
-                  'quantity',
-                  'unit',
-                  'price',
-                  'reason',
-                  'current_location',
-                ].map((field) => (
-                  <input
-                    key={field}
-                    name={field}
-                    value={form[field]}
-                    onChange={handleChange}
-                    className="bg-[#0E1116] border border-[#2A2F36] px-2 py-1 rounded"
-                  />
-                ))}
+              <div>
+                <p className="font-medium text-[#1A1A1A]">{m.name}</p>
 
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => saveEdit(m.id)}
-                    className="bg-green-600 px-3 py-1 rounded"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setEditingId(null)}
-                    className="bg-gray-600 px-3 py-1 rounded"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <p className="text-sm text-[#6B6B6B]">
+                  {m.quantity} {m.unit} • ₹{m.price} •{" "}
+                  {m.locations?.name || "No location"}
+                </p>
 
+                {m.reason && (
+                  <p className="text-xs text-[#A0A0A0]">{m.reason}</p>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col gap-4">
 
-                {/* TOP */}
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-lg font-semibold">{m.name}</p>
-                    <p className="text-sm text-[#9DA7B3]">
-                      {m.description || 'No description'}
-                    </p>
-                  </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => startEdit(m)}
+                  className="text-sm text-blue-500"
+                >
+                  Edit
+                </button>
 
-                  <div className="flex gap-3 text-sm">
-                    <button
-                      onClick={() => startEdit(m)}
-                      className="text-blue-400"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deleteMaterial(m.id)}
-                      className="text-red-400"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-
-                {/* METRICS */}
-                <div className="flex gap-3">
-
-                  <div className="bg-[#1C2128] px-3 py-2 rounded-lg">
-                    <p className="text-xs text-[#6B7280]">Qty</p>
-                    <p className="font-medium">
-                      {m.quantity} {m.unit || ''}
-                    </p>
-                  </div>
-
-                  <div className="bg-[#1C2128] px-3 py-2 rounded-lg">
-                    <p className="text-xs text-[#6B7280]">Price</p>
-                    <p className="font-medium">
-                      ₹{m.price ? Number(m.price).toFixed(2) : '0.00'}
-                    </p>
-                  </div>
-
-                  <div className="bg-[#1C2128] px-3 py-2 rounded-lg">
-                    <p className="text-xs text-[#6B7280]">Location</p>
-                    <p className="font-medium">
-                      {m.current_location || '—'}
-                    </p>
-                  </div>
-
-                </div>
-
+                {role === "admin" && (
+                  <button
+                    onClick={() => deleteMaterial(m.id)}
+                    className="text-sm text-red-500"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
-            )}
 
-          </Card>
+            </div>
+          </motion.div>
         ))}
-
-      </div>
+      </motion.div>
 
     </div>
-  )
+  );
 }

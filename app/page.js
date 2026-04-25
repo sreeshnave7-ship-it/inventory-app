@@ -1,239 +1,179 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import Header from '@/components/dashboard/Header'
-import StatsCard from '@/components/dashboard/StatsCard'
-import Card from '@/components/ui/Card'
-import { supabase } from '@/lib/supabase'
-import {
-  Package, Wrench, MapPin, ArrowLeftRight,
-  Activity, Settings, XCircle, Inbox, MoreVertical,
-} from 'lucide-react'
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-export default function DashboardPage() {
-  const [materials, setMaterials] = useState([])
-  const [equipment, setEquipment] = useState([])
-  const [locations, setLocations] = useState([])
-  const [movements, setMovements] = useState([])
-  const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(true)
+// ---------- CARD ----------
+function Card({ children, onClick }) {
+  return (
+    <div className="relative group">
+      <div
+        className="absolute left-1/2 -translate-x-1/2 bottom-[-10px] w-[60%] h-[36px] rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition duration-200"
+        style={{ background: "rgba(58,125,93,0.25)" }}
+      />
+
+      <motion.div
+        whileHover={{ y: -6, scale: 1.01 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        onClick={onClick}
+        className="relative squircle p-6 bg-[#FAF9F6] cursor-pointer"
+        style={{
+          boxShadow:
+            "0 12px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)",
+        }}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
+// ---------- COUNT ANIMATION ----------
+function AnimatedNumber({ value }) {
+  return (
+    <motion.span
+      key={value}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.3,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+    >
+      {value}
+    </motion.span>
+  );
+}
+
+export default function Dashboard() {
+  const router = useRouter();
+
+  const [stats, setStats] = useState({
+    stock: 0,
+    movements: 0,
+    equipment: 0,
+    requests: 0,
+  });
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [mat, eq, loc, mov, log] = await Promise.all([
-          supabase.from('materials').select('*'),
-          supabase.from('equipment').select('*'),
-          supabase.from('locations').select('*'),
-          supabase.from('movements').select('*').order('date', { ascending: false }).limit(10),
-          supabase.from('logs').select('*').order('timestamp', { ascending: false }).limit(15),
-        ])
-        setMaterials(mat.data || [])
-        setEquipment(eq.data || [])
-        setLocations(loc.data || [])
-        setMovements(mov.data || [])
-        setLogs(log.data || [])
-      } catch (e) {
-        console.error(e)
-      }
-      setLoading(false)
+    async function fetchData() {
+      const { count: stock } = await supabase
+        .from("materials")
+        .select("*", { count: "exact", head: true });
+
+      const { count: movements } = await supabase
+        .from("movements")
+        .select("*", { count: "exact", head: true });
+
+      const { count: equipment } = await supabase
+        .from("equipment")
+        .select("*", { count: "exact", head: true });
+
+      const { count: requests } = await supabase
+        .from("requests")
+        .select("*", { count: "exact", head: true });
+
+      setStats({
+        stock: stock || 0,
+        movements: movements || 0,
+        equipment: equipment || 0,
+        requests: requests || 0,
+      });
     }
-    load()
-  }, [])
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <span className="text-sm text-[#9DA7B3]">Loading...</span>
-      </div>
-    )
-  }
-
-  const totalMatVal = materials.reduce((s, m) => s + (m.price || 0) * (m.quantity || 0), 0)
-  const totalEqVal = equipment.reduce((s, e) => s + (e.price || 0), 0)
-
-  const eqByStatus = equipment.reduce((a, e) => {
-    const st = e.status || 'Unknown'
-    a[st] = (a[st] || 0) + 1
-    return a
-  }, {})
-
-  const locById = {}
-  const locByName = {}
-
-  locations.forEach(l => {
-    locById[l.id] = l
-    locByName[l.name] = l
-  })
-
-  const resolveLoc = (ref) => locById[ref] || locByName[ref] || null
-
-  const matByLoc = {}
-  materials.forEach(m => {
-    const loc = resolveLoc(m.current_location)
-    const key = loc ? loc.id : 'unassigned'
-    if (!matByLoc[key]) matByLoc[key] = { items: 0, qty: 0 }
-    matByLoc[key].items++
-    matByLoc[key].qty += m.quantity || 0
-  })
-
-  const eqByLoc = {}
-  equipment.forEach(e => {
-    const loc = resolveLoc(e.current_location)
-    const key = loc ? loc.id : 'unassigned'
-    eqByLoc[key] = (eqByLoc[key] || 0) + 1
-  })
-
-  const statusColors = {
-    available: 'bg-success',
-    'in-use': 'bg-primary',
-    maintenance: 'bg-warning',
-    damaged: 'bg-danger',
-    unknown: 'bg-muted',
-  }
-
-  const getStatusColor = (s) =>
-    statusColors[(s || '').toLowerCase()] || 'bg-muted'
+    fetchData();
+  }, []);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="min-h-screen p-8">
+      {/* HEADER */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{
+          duration: 0.35,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        className="mb-10"
+      >
+        <h1
+          className="text-5xl tracking-tight text-[#1A1A1A]"
+          style={{ fontFamily: "Milker, sans-serif" }}
+        >
+          Dashboard
+        </h1>
+        <p className="text-[#6B6B6B] mt-2 text-sm">
+          Overview of your operations
+        </p>
+      </motion.div>
 
-      {/* TOP STATS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatsCard icon={Package} label="Materials" value={materials.length} sub={fmtCur(totalMatVal) + ' value'} />
-        <StatsCard icon={Wrench} label="Equipment" value={equipment.length} sub={fmtCur(totalEqVal) + ' value'} />
-        <StatsCard icon={MapPin} label="Locations" value={locations.length} sub={`${locations.filter(l => l.type === 'plot').length} plots, ${locations.filter(l => l.type === 'site').length} sites`} />
-        <StatsCard icon={ArrowLeftRight} label="Movements" value={movements.length} sub="Recent transfers" />
-      </div>
+      {/* MAIN GRID */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-      {/* BOTTOM GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        {/* LEFT */}
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: {
+              transition: { staggerChildren: 0.12 },
+            },
+          }}
+          className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6"
+        >
+          {[
+            { label: "Total Stock", value: stats.stock, route: "/materials" },
+            { label: "Movements", value: stats.movements, route: "/movements" },
+            { label: "Equipment", value: stats.equipment, route: "/equipment" },
+            { label: "Requests", value: stats.requests, route: "/requests" },
+          ].map((item, i) => (
+            <motion.div
+              key={i}
+              variants={{
+                hidden: { opacity: 0, y: 14 },
+                visible: {
+                  opacity: 1,
+                  y: 0,
+                  transition: {
+                    duration: 0.3,
+                    ease: [0.22, 1, 0.36, 1],
+                  },
+                },
+              }}
+            >
+              <Card onClick={() => router.push(item.route)}>
+                <p className="text-sm text-[#6B6B6B]">{item.label}</p>
+                <h2 className="text-4xl font-semibold mt-2 text-[#1A1A1A]">
+                  <AnimatedNumber value={item.value} />
+                </h2>
+              </Card>
+            </motion.div>
+          ))}
+        </motion.div>
 
-        {/* STOCK BY LOCATION */}
-        <Card className="flex flex-col gap-4 min-h-[360px]">
-          <Header title="Stock by Location" />
+        {/* RIGHT */}
+        <div className="grid gap-6">
+          <Card>
+            <p className="text-lg font-medium text-[#1A1A1A]">
+              System Status
+            </p>
+            <p className="text-[#6B6B6B] mt-2 text-sm">
+              All systems operational. No anomalies detected.
+            </p>
+          </Card>
 
-          <div className="flex flex-col gap-6 overflow-y-auto">
-            {locations.map(loc => {
-              const md = matByLoc[loc.id] || { items: 0, qty: 0 }
-              const ec = eqByLoc[loc.id] || 0
-              const dot =
-                loc.type === 'plot'
-                  ? 'bg-primary'
-                  : loc.type === 'site'
-                  ? 'bg-success'
-                  : 'bg-warning'
-
-              return (
-                <Card key={loc.id} className="flex flex-col gap-4 hover:bg-[#1A1F26] transition">
-                  <div className="flex justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-3 w-3 rounded-full ${dot}`} />
-                      <div>
-                        <p className="font-semibold">{loc.name}</p>
-                        <p className="text-xs text-[#9DA7B3] uppercase">{loc.type}</p>
-                      </div>
-                    </div>
-                    <MoreVertical size={18} />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <Metric val={md.items} label="Materials" />
-                    <Metric val={ec} label="Equipment" />
-                    <Metric val={md.qty} label="Total Qty" />
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-        </Card>
-
-        {/* EQUIPMENT STATUS */}
-        <Card className="flex flex-col gap-4 min-h-[360px]">
-          <Header title="Equipment Status" />
-
-          <div className="flex flex-col gap-4">
-            <div className="flex items-end gap-3">
-              <p className="text-4xl font-bold">{equipment.length}</p>
-              <p className="text-sm text-[#9DA7B3]">Total Items</p>
-            </div>
-
-            <div className="flex h-3 rounded-full overflow-hidden bg-[#1C2128]">
-              {Object.entries(eqByStatus).map(([st, ct]) => (
-                <div
-                  key={st}
-                  className={getStatusColor(st)}
-                  style={{ width: `${(ct / equipment.length) * 100}%` }}
-                />
-              ))}
-            </div>
-
-            {Object.entries(eqByStatus).map(([st, ct]) => (
-              <div key={st} className="flex justify-between">
-                <span className="text-sm text-[#9DA7B3]">{st}</span>
-                <span className="font-semibold">{ct}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* ACTIVITY */}
-        <Card className="flex flex-col gap-4 min-h-[360px]">
-          <Header title="Recent Activity" />
-
-          {logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center flex-1 text-center gap-3">
-              <Inbox size={28} className="text-[#9DA7B3]" />
-              <p>No activity yet</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {logs.map((log, i) => (
-                <div key={i} className="flex gap-3">
-                  <ActivityIcon action={log.action} />
-                  <div className="flex-1">
-                    <p className="text-sm">{log.action}</p>
-                    <p className="text-xs text-[#9DA7B3]">{fmtTime(log.timestamp)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
+          <Card>
+            <p className="text-lg font-medium text-[#1A1A1A]">
+              Activity Overview
+            </p>
+            <p className="text-[#6B6B6B] mt-2 text-sm">
+              Recent movements and updates will appear here once activity begins.
+            </p>
+          </Card>
+        </div>
       </div>
     </div>
-  )
-}
-
-function Metric({ val, label }) {
-  return (
-    <div>
-      <p className="text-xl font-semibold">{val}</p>
-      <p className="text-xs text-[#9DA7B3]">{label}</p>
-    </div>
-  )
-}
-
-function ActivityIcon({ action }) {
-  const a = (action || '').toLowerCase()
-  if (a.includes('add')) return <Package size={16} />
-  if (a.includes('edit')) return <Settings size={16} />
-  if (a.includes('delete')) return <XCircle size={16} />
-  if (a.includes('move')) return <ArrowLeftRight size={16} />
-  return <Activity size={16} />
-}
-
-function fmtCur(v) {
-  if (!v) return '\u20B90'
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(v)
-}
-
-function fmtTime(ts) {
-  if (!ts) return ''
-  return new Date(ts).toLocaleString()
+  );
 }
